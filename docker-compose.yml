@@ -1,0 +1,59 @@
+﻿version: '3.9'
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: mlops-minio
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ':9001'
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.2
+    container_name: mlops-mlflow
+    ports:
+      - '5000:5000'
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root s3://mlflow-artifacts/
+      --host 0.0.0.0
+      --port 5000
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - mlflow_data:/mlflow
+
+  serving:
+    build:
+      context: .
+      dockerfile: docker/serving.Dockerfile
+    container_name: mlops-serving
+    ports:
+      - '8000:8000'
+    environment:
+      MODEL_PATH: model.pkl
+      MODEL_VERSION: '1.0.0'
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    depends_on:
+      - mlflow
+
+volumes:
+  minio_data:
+  mlflow_data:
