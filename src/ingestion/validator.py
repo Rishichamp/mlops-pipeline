@@ -6,28 +6,25 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Define the schema — this is the contract for your data
 raw_schema = DataFrameSchema({
     'sepal_length': Column(float, [
-        Check.greater_than(0),
-        Check.less_than(20),
-        Check(lambda s: s.isna().sum() == 0, error='sepal_length has nulls'),
+        Check(lambda x: x > 0, element_wise=True),
+        Check(lambda x: x < 20, element_wise=True),
     ]),
     'sepal_width': Column(float, [
-        Check.greater_than(0),
-        Check.less_than(20),
-        Check(lambda s: s.isna().sum() == 0, error='sepal_width has nulls'),
+        Check(lambda x: x > 0, element_wise=True),
+        Check(lambda x: x < 20, element_wise=True),
     ]),
     'petal_length': Column(float, [
-        Check.greater_than(0),
-        Check.less_than(20),
+        Check(lambda x: x > 0, element_wise=True),
+        Check(lambda x: x < 20, element_wise=True),
     ]),
     'petal_width': Column(float, [
-        Check.greater_than(0),
-        Check.less_than(10),
+        Check(lambda x: x > 0, element_wise=True),
+        Check(lambda x: x < 10, element_wise=True),
     ]),
-    'target': Column(int, Check.isin([0, 1, 2])),
-    'species': Column(str, Check.isin(['setosa', 'versicolor', 'virginica'])),
+    'target': Column(int, Check(lambda x: x in [0, 1, 2], element_wise=True)),
+    'species': Column(str, Check(lambda x: x in ['setosa', 'versicolor', 'virginica'], element_wise=True)),
 })
 
 def validate_raw_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -45,6 +42,8 @@ def validate_from_csv(path: str) -> pd.DataFrame:
     return validate_raw_data(df)
 
 if __name__ == '__main__':
+    import sys
+    sys.path.insert(0, '.')
     from src.ingestion.data_loader import load_raw_data
     df = load_raw_data()
     validated = validate_raw_data(df)
