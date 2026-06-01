@@ -1,0 +1,60 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlops-serving
+  namespace: mlops
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mlops-serving
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: mlops-serving
+    spec:
+      containers:
+        - name: serving
+          image: mlops-serving:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: USE_MLFLOW_REGISTRY
+              value: 'true'
+            - name: MODEL_NAME
+              value: 'iris-classifier'
+            - name: MLFLOW_TRACKING_URI
+              value: 'http://mlflow-service:5000'
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: 'http://minio-service:9000'
+            - name: AWS_ACCESS_KEY_ID
+              value: 'minioadmin'
+            - name: AWS_SECRET_ACCESS_KEY
+              value: 'minioadmin'
+            - name: AWS_DEFAULT_REGION
+              value: 'us-east-1'
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '250m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10

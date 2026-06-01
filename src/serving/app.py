@@ -1,7 +1,10 @@
 ﻿from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 from contextlib import asynccontextmanager
+from prometheus_fastapi_instrumentator import Instrumentator
 import numpy as np
+import mlflow.sklearn
+import mlflow
 import joblib
 import os
 import logging
@@ -18,52 +21,88 @@ class PredictResponse(BaseModel):
     prediction_label: str
     confidence: float
     model_version: str
+    model_source: str
 
 class HealthResponse(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
     status: str
     model_loaded: bool
+    model_source: str
+    model_version: str
 
 class ModelStore:
     def __init__(self):
-        self.model = None
-        self.version = 'unknown'
-        self.label_map = {0: 'setosa', 1: 'versicolor', 2: 'virginica'}
+        self.model        = None
+        self.version      = 'unknown'
+        self.source       = 'none'
+        self.label_map    = {0: 'setosa', 1: 'versicolor', 2: 'virginica'}
 
-    def load(self, path: str):
-        self.model = joblib.load(path)
+    def load_from_mlflow(self, model_name: str, stage: str = 'Production'):
+        mlflow_uri = os.getenv('MLFLOW_TRACKING_URI', 'http://localhost:5000')
+        mlflow.set_tracking_uri(mlflow_uri)
+        model_uri  = f'models:/{model_name}/{stage}'
+        logger.info(f'Loading model from MLflow: {model_uri}')
+        self.model   = mlflow.sklearn.load_model(model_uri)
+        self.version = os.getenv('MODEL_VERSION', 'mlflow-production')
+        self.source  = f'mlflow:{model_uri}'
+        logger.info(f'Model loaded from MLflow registry')
+
+    def load_from_file(self, path: str):
+        self.model   = joblib.load(path)
         self.version = os.getenv('MODEL_VERSION', '1.0.0')
-        logger.info(f'Model loaded from {path}, version={self.version}')
+        self.source  = f'file:{path}'
+        logger.info(f'Model loaded from file: {path}')
 
-    def predict(self, features):
+    def predict(self, features: list[float]) -> dict:
         if self.model is None:
             raise RuntimeError('Model not loaded')
-        X = np.array(features).reshape(1, -1)
-        pred = int(self.model.predict(X)[0])
-        proba = float(self.model.predict_proba(X).max())
+        X      = np.array(features).reshape(1, -1)
+        pred   = int(self.model.predict(X)[0])
+        proba  = float(self.model.predict_proba(X).max())
         return {
-            'prediction': pred,
-            'prediction_label': self.label_map[pred],
-            'confidence': round(proba, 4),
-            'model_version': self.version,
+            'prediction':       pred,
+            'prediction_label': self.label_map.get(pred, 'unknown'),
+            'confidence':       round(proba, 4),
+            'model_version':    self.version,
+            'model_source':     self.source,
         }
 
 model_store = ModelStore()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    model_path = os.getenv('MODEL_PATH', 'model.pkl')
-    if os.path.exists(model_path):
-        model_store.load(model_path)
+    use_mlflow = os.getenv('USE_MLFLOW_REGISTRY', 'false').lower() == 'true'
+    if use_mlflow:
+        try:
+            model_name = os.getenv('MODEL_NAME', 'iris-classifier')
+            model_store.load_from_mlflow(model_name)
+        except Exception as e:
+            logger.warning(f'MLflow load failed: {e}. Falling back to file.')
+            path = os.getenv('MODEL_PATH', 'model.pkl')
+            if os.path.exists(path):
+                model_store.load_from_file(path)
     else:
-        logger.warning(f'No model at {model_path}')
+        path = os.getenv('MODEL_PATH', 'model.pkl')
+        if os.path.exists(path):
+            model_store.load_from_file(path)
+        else:
+            logger.warning(f'No model at {path}')
     yield
+    logger.info('Shutting down')
 
-app = FastAPI(title='MLOps Serving API', version='0.1.0', lifespan=lifespan)
+app = FastAPI(title='MLOps Serving API', version='0.2.0', lifespan=lifespan)
+
+# Prometheus metrics — exposes /metrics endpoint automatically
+Instrumentator().instrument(app).expose(app)
 
 @app.get('/health', response_model=HealthResponse)
 def health():
-    return {'status': 'ok', 'model_loaded': model_store.model is not None}
+    return {
+        'status':        'ok',
+        'model_loaded':  model_store.model is not None,
+        'model_source':  model_store.source,
+        'model_version': model_store.version,
+    }
 
 @app.post('/predict', response_model=PredictResponse)
 def predict(req: PredictRequest):
@@ -74,4 +113,4 @@ def predict(req: PredictRequest):
 
 @app.get('/')
 def root():
-    return {'message': 'MLOps Serving API', 'docs': '/docs'}
+    return {'message': 'MLOps Serving API v0.2.0', 'docs': '/docs', 'metrics': '/metrics'}
