@@ -2,6 +2,7 @@
 from pydantic import BaseModel, ConfigDict
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Gauge
 import numpy as np
 import mlflow.sklearn
 import mlflow
@@ -11,6 +12,10 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Custom Prometheus gauge for drift score
+DRIFT_SCORE = Gauge('mlops_drift_score', 'Current model drift score')
+PREDICTION_COUNT = Gauge('mlops_prediction_count_total', 'Total predictions served')
 
 class PredictRequest(BaseModel):
     features: list[float]
@@ -36,6 +41,7 @@ class ModelStore:
         self.version      = 'unknown'
         self.source       = 'none'
         self.label_map    = {0: 'setosa', 1: 'versicolor', 2: 'virginica'}
+        self._pred_count  = 0
 
     def load_from_mlflow(self, model_name: str, stage: str = 'Production'):
         mlflow_uri = os.getenv('MLFLOW_TRACKING_URI', 'http://localhost:5000')
@@ -45,7 +51,6 @@ class ModelStore:
         self.model   = mlflow.sklearn.load_model(model_uri)
         self.version = os.getenv('MODEL_VERSION', 'mlflow-production')
         self.source  = f'mlflow:{model_uri}'
-        logger.info(f'Model loaded from MLflow registry')
 
     def load_from_file(self, path: str):
         self.model   = joblib.load(path)
@@ -59,6 +64,17 @@ class ModelStore:
         X      = np.array(features).reshape(1, -1)
         pred   = int(self.model.predict(X)[0])
         proba  = float(self.model.predict_proba(X).max())
+
+        # Log prediction for drift detection
+        try:
+            from src.monitoring.prediction_logger import log_prediction
+            log_prediction(features, pred, proba)
+        except Exception as e:
+            logger.warning(f'Failed to log prediction: {e}')
+
+        self._pred_count += 1
+        PREDICTION_COUNT.set(self._pred_count)
+
         return {
             'prediction':       pred,
             'prediction_label': self.label_map.get(pred, 'unknown'),
@@ -74,8 +90,7 @@ async def lifespan(app: FastAPI):
     use_mlflow = os.getenv('USE_MLFLOW_REGISTRY', 'false').lower() == 'true'
     if use_mlflow:
         try:
-            model_name = os.getenv('MODEL_NAME', 'iris-classifier')
-            model_store.load_from_mlflow(model_name)
+            model_store.load_from_mlflow(os.getenv('MODEL_NAME', 'iris-classifier'))
         except Exception as e:
             logger.warning(f'MLflow load failed: {e}. Falling back to file.')
             path = os.getenv('MODEL_PATH', 'model.pkl')
@@ -85,14 +100,9 @@ async def lifespan(app: FastAPI):
         path = os.getenv('MODEL_PATH', 'model.pkl')
         if os.path.exists(path):
             model_store.load_from_file(path)
-        else:
-            logger.warning(f'No model at {path}')
     yield
-    logger.info('Shutting down')
 
-app = FastAPI(title='MLOps Serving API', version='0.2.0', lifespan=lifespan)
-
-# Prometheus metrics — exposes /metrics endpoint automatically
+app = FastAPI(title='MLOps Serving API', version='0.3.0', lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)
 
 @app.get('/health', response_model=HealthResponse)
@@ -113,4 +123,4 @@ def predict(req: PredictRequest):
 
 @app.get('/')
 def root():
-    return {'message': 'MLOps Serving API v0.2.0', 'docs': '/docs', 'metrics': '/metrics'}
+    return {'message': 'MLOps Serving API v0.3.0', 'docs': '/docs', 'metrics': '/metrics'}

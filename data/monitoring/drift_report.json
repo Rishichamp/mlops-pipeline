@@ -1,0 +1,26 @@
+{
+  "drift_detected": true,
+  "drift_score": 0.9043,
+  "feature_drift": {
+    "sepal_length": {
+      "statistic": 1.0,
+      "pvalue": 0.0
+    },
+    "sepal_width": {
+      "statistic": 0.9608,
+      "pvalue": 0.0
+    },
+    "petal_length": {
+      "statistic": 0.9833,
+      "pvalue": 0.0
+    },
+    "petal_width": {
+      "statistic": 0.6733,
+      "pvalue": 0.0
+    }
+  },
+  "n_reference": 150,
+  "n_current": 240,
+  "timestamp": "2026-06-03T13:17:08.091010",
+  "threshold": 0.1
+}
