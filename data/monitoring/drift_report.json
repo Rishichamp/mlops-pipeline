@@ -1,26 +1,26 @@
 {
   "drift_detected": true,
-  "drift_score": 0.9043,
+  "drift_score": 0.9022,
   "feature_drift": {
     "sepal_length": {
       "statistic": 1.0,
       "pvalue": 0.0
     },
     "sepal_width": {
-      "statistic": 0.9608,
+      "statistic": 0.963,
       "pvalue": 0.0
     },
     "petal_length": {
-      "statistic": 0.9833,
+      "statistic": 0.983,
       "pvalue": 0.0
     },
     "petal_width": {
-      "statistic": 0.6733,
+      "statistic": 0.663,
       "pvalue": 0.0
     }
   },
   "n_reference": 150,
-  "n_current": 240,
-  "timestamp": "2026-06-03T13:17:08.091010",
+  "n_current": 290,
+  "timestamp": "2026-06-05T05:25:00.384857",
   "threshold": 0.1
 }
