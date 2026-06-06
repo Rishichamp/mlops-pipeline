@@ -118,7 +118,7 @@ services:
       MODEL_PATH: model.pkl
       MODEL_NAME: iris-classifier
       USE_MLFLOW_REGISTRY: 'false'
-      AB_MODE: 'false'
+      AB_MODE: 'true'
       SHADOW_MODE: 'false'
       AB_SPLIT: '0.9'
       MLFLOW_TRACKING_URI: http://mlflow:5000
@@ -162,4 +162,5 @@ volumes:
   airflow_logs:
   prometheus_data:
   grafana_data:
+
 
