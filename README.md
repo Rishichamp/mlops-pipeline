@@ -30,7 +30,7 @@ A production-grade MLOps pipeline built from scratch with all industry-standard 
 - Phase 6: A/B testing (90/10 split), shadow mode, champion-challenger
 
 ## Quick Start
-\\\powershell
+\powershell
 docker compose up -d
 # API    → http://localhost:8000/docs
 # MLflow → http://localhost:5000
