@@ -1,18 +1,37 @@
-﻿__pycache__/
+﻿# Python
+__pycache__/
 *.py[cod]
 *.egg-info/
 .env
 venv/
 .venv/
+
+# Data (never commit raw data)
 data/raw/*
 data/processed/*
 data/features/*
+data/predictions/*
+data/monitoring/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/features/.gitkeep
+!data/predictions/.gitkeep
+!data/monitoring/.gitkeep
+
+# MLflow
 mlruns/
 mlartifacts/
-artifacts/
+
+# Artifacts (models are large — store in MLflow/MinIO)
+artifacts/model.pkl
+artifacts/scaler.pkl
+
+# IDE
 .vscode/
 .idea/
+
+# Docker
 *.log
+
+# Secrets
+.env
