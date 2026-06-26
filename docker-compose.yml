@@ -113,7 +113,7 @@ services:
       dockerfile: docker/serving.Dockerfile
     container_name: mlops-serving
     ports:
-      - '8000:8000'
+      - '8001:8000'
     environment:
       MODEL_PATH: model.pkl
       MODEL_NAME: iris-classifier
