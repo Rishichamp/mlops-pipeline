@@ -1,5 +1,10 @@
-﻿import os
+import os
+import tempfile
 import pytest
+
+# Keep test predictions out of the tracked data/predictions log.
+os.environ.setdefault('PREDICTION_LOG_PATH',
+                      os.path.join(tempfile.mkdtemp(), 'predictions.jsonl'))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)

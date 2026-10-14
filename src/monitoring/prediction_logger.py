@@ -7,7 +7,7 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-PREDICTION_LOG_PATH = 'data/predictions/predictions.jsonl'
+PREDICTION_LOG_PATH = os.getenv('PREDICTION_LOG_PATH', 'data/predictions/predictions.jsonl')
 
 def log_prediction(features: list, prediction: int, confidence: float):
     os.makedirs(os.path.dirname(PREDICTION_LOG_PATH), exist_ok=True)

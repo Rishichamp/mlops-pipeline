@@ -1,4 +1,4 @@
-﻿import os, sys
+import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
@@ -13,9 +13,7 @@ def client():
     # Import fresh inside fixture so MODEL_PATH env var is set first
     os.environ['MODEL_PATH'] = MODEL_PATH
     from src.serving import app as app_module
-    # Force reload of model_store for each test
-    app_module.model_store.model = None
-    app_module.model_store.load(MODEL_PATH)
+    # The app's lifespan (router.setup) loads the model from MODEL_PATH.
     with TestClient(app_module.app) as c:
         yield c
 

@@ -1,11 +1,9 @@
-﻿from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Gauge, Counter
 import numpy as np
-import mlflow.sklearn
-import mlflow
 import joblib
 import os
 import logging
@@ -56,6 +54,10 @@ class SingleModel:
         logger.info(f'[{self.name}] loaded from {path}')
 
     def load_from_mlflow(self, model_name: str, stage: str):
+        # Imported here: only registry loading needs MLflow, so file-based
+        # serving and the tests run without it installed.
+        import mlflow
+        import mlflow.sklearn
         mlflow_uri = os.getenv('MLFLOW_TRACKING_URI', 'http://localhost:5000')
         mlflow.set_tracking_uri(mlflow_uri)
         uri        = f'models:/{model_name}/{stage}'
