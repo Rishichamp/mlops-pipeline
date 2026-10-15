@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel, ConfigDict
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Gauge, Counter
@@ -19,7 +21,18 @@ AB_COUNTER       = Counter('mlops_ab_requests_total',    'A/B requests', ['versi
 AB_CONFIDENCE    = Gauge('mlops_ab_confidence',          'Mean confidence per version', ['version'])
 
 class PredictRequest(BaseModel):
-    features: list[float]
+    features: list[float] = Field(..., min_length=1, max_length=100)
+
+    @field_validator('features')
+    @classmethod
+    def finite(cls, v):
+        if not all(np.isfinite(x) for x in v):
+            raise ValueError('features must be finite numbers')
+        return v
+
+
+class ModelNotLoaded(Exception):
+    pass
 
 class PredictResponse(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
@@ -67,6 +80,11 @@ class SingleModel:
         logger.info(f'[{self.name}] loaded from MLflow {uri}')
 
     def predict(self, features: list[float]) -> dict:
+        if self.model is None:
+            raise ModelNotLoaded(f'No {self.name} model is loaded')
+        expected = getattr(self.model, 'n_features_in_', None)
+        if expected is not None and len(features) != expected:
+            raise ValueError(f'Expected {expected} features, got {len(features)}')
         X      = np.array(features).reshape(1, -1)
         pred   = int(self.model.predict(X)[0])
         proba  = float(self.model.predict_proba(X).max())
@@ -89,9 +107,15 @@ class ABRouter:
 
     def setup(self):
         model_path = os.getenv('MODEL_PATH', 'model.pkl')
+        # The challenger defaults to the champion's file (demo); point
+        # CHALLENGER_MODEL_PATH at a second model for a real A/B test.
+        challenger_path = os.getenv('CHALLENGER_MODEL_PATH', model_path)
         if os.path.exists(model_path):
             self.champion.load_from_file(model_path)
-            self.challenger.load_from_file(model_path)  # same model for demo
+        else:
+            logger.warning(f'Champion model not found at {model_path}')
+        if os.path.exists(challenger_path):
+            self.challenger.load_from_file(challenger_path)
 
         self.ab_mode     = os.getenv('AB_MODE',     'false').lower() == 'true'
         self.shadow_mode = os.getenv('SHADOW_MODE', 'false').lower() == 'true'
@@ -144,6 +168,15 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title='MLOps Serving API', version='0.4.0', lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    # The default handler echoes the rejected input, and a NaN/Infinity input
+    # can't be serialised to JSON, so the 422 itself crashed into a 500.
+    errors = [{'loc': e.get('loc'), 'msg': e.get('msg'), 'type': e.get('type')}
+              for e in exc.errors()]
+    return JSONResponse(status_code=422, content={'detail': errors})
 Instrumentator().instrument(app).expose(app)
 
 @app.get('/health', response_model=HealthResponse)
@@ -159,10 +192,17 @@ def health():
 
 @app.post('/predict', response_model=PredictResponse)
 def predict(req: PredictRequest):
+    # Previously every error became a 503 carrying the raw exception text
+    # (e.g. "'NoneType' object has no attribute 'predict'").
     try:
         return router.route(req.features)
-    except Exception as e:
+    except ModelNotLoaded as e:
         raise HTTPException(status_code=503, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        logger.exception('Prediction failed')
+        raise HTTPException(status_code=500, detail='Prediction failed')
 
 @app.get('/')
 def root():

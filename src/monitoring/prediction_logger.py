@@ -8,6 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 PREDICTION_LOG_PATH = os.getenv('PREDICTION_LOG_PATH', 'data/predictions/predictions.jsonl')
+FEATURE_COLS = ['sepal_length', 'sepal_width', 'petal_length', 'petal_width']
 
 def log_prediction(features: list, prediction: int, confidence: float):
     os.makedirs(os.path.dirname(PREDICTION_LOG_PATH), exist_ok=True)
@@ -23,17 +24,27 @@ def log_prediction(features: list, prediction: int, confidence: float):
 def load_predictions_as_df(path: str = PREDICTION_LOG_PATH) -> pd.DataFrame:
     if not os.path.exists(path):
         return pd.DataFrame()
-    records = []
+    records, skipped = [], 0
     with open(path) as f:
         for line in f:
             line = line.strip()
-            if line:
-                records.append(json.loads(line))
+            if not line:
+                continue
+            # one truncated or foreign line (e.g. a crash mid-write) used to
+            # make the whole log unreadable
+            try:
+                rec = json.loads(line)
+                if len(rec['features']) != len(FEATURE_COLS):
+                    raise ValueError('wrong feature count')
+                records.append(rec)
+            except (ValueError, KeyError, TypeError):
+                skipped += 1
+    if skipped:
+        logger.warning(f'Skipped {skipped} malformed prediction log lines in {path}')
     if not records:
         return pd.DataFrame()
     df = pd.DataFrame(records)
-    features_df = pd.DataFrame(df['features'].tolist(),
-        columns=['sepal_length','sepal_width','petal_length','petal_width'])
+    features_df = pd.DataFrame(df['features'].tolist(), columns=FEATURE_COLS)
     return pd.concat([features_df, df[['timestamp','prediction','confidence']]], axis=1)
 
 def upload_predictions_to_minio():

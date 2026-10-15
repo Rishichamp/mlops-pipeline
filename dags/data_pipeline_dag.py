@@ -46,12 +46,12 @@ def task_upload(**context):
 
 def task_train(**context):
     # Set ALL required env vars BEFORE importing mlflow
-    os.environ['MLFLOW_TRACKING_URI']    = 'http://mlflow:5000'
+    os.environ.setdefault('MLFLOW_TRACKING_URI',    'http://mlflow:5000')
     os.environ['MLFLOW_EXPERIMENT_NAME'] = 'mlops-pipeline'
-    os.environ['MLFLOW_S3_ENDPOINT_URL'] = 'http://minio:9000'
-    os.environ['AWS_ACCESS_KEY_ID']      = 'minioadmin'
-    os.environ['AWS_SECRET_ACCESS_KEY']  = 'minioadmin'
-    os.environ['AWS_DEFAULT_REGION']     = 'us-east-1'
+    os.environ.setdefault('MLFLOW_S3_ENDPOINT_URL', 'http://minio:9000')
+    os.environ.setdefault('AWS_ACCESS_KEY_ID',      'minioadmin')
+    os.environ.setdefault('AWS_SECRET_ACCESS_KEY',  'minioadmin')
+    os.environ.setdefault('AWS_DEFAULT_REGION',     'us-east-1')
     os.environ['GIT_PYTHON_REFRESH']     = 'quiet'
 
     from src.training.train_mlflow import (

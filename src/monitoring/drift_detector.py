@@ -9,11 +9,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 FEATURE_COLS = ['sepal_length', 'sepal_width', 'petal_length', 'petal_width']
+DRIFT_THRESHOLD = float(os.getenv('DRIFT_THRESHOLD', '0.1'))
+# The KS statistic is noisy on small samples: with 5 points it is usually
+# above 0.1 even when nothing changed, which triggered retraining on every
+# run. Require a meaningful sample before deciding.
+MIN_SAMPLES = int(os.getenv('DRIFT_MIN_SAMPLES', '30'))
+# Compare against recent traffic only, not the whole prediction history.
+DRIFT_WINDOW = int(os.getenv('DRIFT_WINDOW', '500'))
+
+def _insufficient(reason: str) -> dict:
+    logger.warning(f'Drift check skipped: {reason}')
+    return {'drift_detected': False, 'drift_score': 0.0, 'reason': reason,
+            'timestamp': datetime.now().isoformat(), 'threshold': DRIFT_THRESHOLD}
 
 def compute_drift_score(reference_df: pd.DataFrame, current_df: pd.DataFrame) -> dict:
-    if current_df.empty or len(current_df) < 5:
-        logger.warning('Not enough current data for drift detection')
-        return {'drift_detected': False, 'drift_score': 0.0, 'reason': 'insufficient_data'}
+    if current_df.empty or len(current_df) < MIN_SAMPLES:
+        return _insufficient('insufficient_data')
+    if reference_df.empty:
+        return _insufficient('no_reference_data')
 
     from scipy import stats
     drift_scores = {}
@@ -29,8 +42,11 @@ def compute_drift_score(reference_df: pd.DataFrame, current_df: pd.DataFrame) ->
             'pvalue':    round(float(pvalue), 4)
         }
 
+    if not drift_scores:  # no shared feature columns: mean of [] would be NaN
+        return _insufficient('no_common_features')
+
     overall_drift  = float(np.mean([v['statistic'] for v in drift_scores.values()]))
-    drift_detected = bool(overall_drift > 0.1)   # ← cast to Python bool
+    drift_detected = bool(overall_drift > DRIFT_THRESHOLD)   # ← cast to Python bool
 
     result = {
         'drift_detected': drift_detected,
@@ -39,7 +55,7 @@ def compute_drift_score(reference_df: pd.DataFrame, current_df: pd.DataFrame) ->
         'n_reference':    int(len(reference_df)),
         'n_current':      int(len(current_df)),
         'timestamp':      datetime.now().isoformat(),
-        'threshold':      0.1,
+        'threshold':      DRIFT_THRESHOLD,
     }
 
     logger.info(f'Drift score: {overall_drift:.4f}  detected={drift_detected}')
@@ -49,11 +65,13 @@ def load_reference_data(path: str = 'data/features/features.parquet') -> pd.Data
     df = pd.read_parquet(path)
     return df[FEATURE_COLS]
 
-def load_production_data(path: str = 'data/predictions/predictions.jsonl') -> pd.DataFrame:
+def load_production_data(path: str = 'data/predictions/predictions.jsonl',
+                         window: int = DRIFT_WINDOW) -> pd.DataFrame:
     from src.monitoring.prediction_logger import load_predictions_as_df
     df = load_predictions_as_df(path)
     if df.empty:
         return df
+    df = df.tail(window)
     available = [c for c in FEATURE_COLS if c in df.columns]
     return df[available] if available else pd.DataFrame()
 

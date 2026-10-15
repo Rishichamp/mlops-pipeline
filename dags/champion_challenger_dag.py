@@ -14,7 +14,7 @@ default_args = {
 }
 
 def task_get_champion_metrics(**context):
-    os.environ['MLFLOW_TRACKING_URI'] = 'http://mlflow:5000'
+    os.environ.setdefault('MLFLOW_TRACKING_URI', 'http://mlflow:5000')
     import mlflow
 
     client = mlflow.tracking.MlflowClient()
@@ -39,11 +39,11 @@ def task_get_champion_metrics(**context):
         context['ti'].xcom_push(key='champion_metrics', value={'version': 'unknown', 'accuracy': 0, 'f1_macro': 0})
 
 def task_train_challenger(**context):
-    os.environ['MLFLOW_TRACKING_URI']    = 'http://mlflow:5000'
-    os.environ['MLFLOW_S3_ENDPOINT_URL'] = 'http://minio:9000'
-    os.environ['AWS_ACCESS_KEY_ID']      = 'minioadmin'
-    os.environ['AWS_SECRET_ACCESS_KEY']  = 'minioadmin'
-    os.environ['AWS_DEFAULT_REGION']     = 'us-east-1'
+    os.environ.setdefault('MLFLOW_TRACKING_URI',    'http://mlflow:5000')
+    os.environ.setdefault('MLFLOW_S3_ENDPOINT_URL', 'http://minio:9000')
+    os.environ.setdefault('AWS_ACCESS_KEY_ID',      'minioadmin')
+    os.environ.setdefault('AWS_SECRET_ACCESS_KEY',  'minioadmin')
+    os.environ.setdefault('AWS_DEFAULT_REGION',     'us-east-1')
     os.environ['GIT_PYTHON_REFRESH']     = 'quiet'
 
     from src.training.train_mlflow import (
@@ -96,7 +96,7 @@ def task_compare(**context):
     return 'keep_champion'
 
 def task_promote(**context):
-    os.environ['MLFLOW_TRACKING_URI'] = 'http://mlflow:5000'
+    os.environ.setdefault('MLFLOW_TRACKING_URI', 'http://mlflow:5000')
     import mlflow
 
     chall   = context['ti'].xcom_pull(key='challenger_metrics', task_ids='train_challenger')

@@ -4,9 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from fastapi.testclient import TestClient
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
-MODEL_PATH = os.path.join(ROOT, 'artifacts', 'model.pkl')
+from tests.conftest import MODEL_PATH
 
 @pytest.fixture()
 def client():
@@ -37,3 +35,26 @@ def test_predict_wrong_input(client):
 def test_root(client):
     r = client.get('/')
     assert r.status_code == 200
+
+
+def test_predict_wrong_feature_count_is_422(client):
+    r = client.post('/predict', json={'features': [5.1, 3.5]})
+    assert r.status_code == 422
+    assert 'Expected 4 features' in r.json()['detail']
+
+
+def test_predict_rejects_non_finite(client):
+    r = client.post('/predict', content='{"features": [NaN, 1, 2, 3]}',
+                    headers={'Content-Type': 'application/json'})
+    assert r.status_code == 422
+
+
+def test_no_model_is_503_without_internals(monkeypatch):
+    monkeypatch.setenv('MODEL_PATH', '/nonexistent/model.pkl')
+    monkeypatch.setenv('CHALLENGER_MODEL_PATH', '/nonexistent/model.pkl')
+    from src.serving import app as app_module
+    app_module.router.champion.model = None
+    with TestClient(app_module.app) as c:
+        r = c.post('/predict', json={'features': [5.1, 3.5, 1.4, 0.2]})
+    assert r.status_code == 503
+    assert 'NoneType' not in r.json()['detail']
