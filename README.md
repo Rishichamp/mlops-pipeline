@@ -3,6 +3,7 @@
 A production-grade MLOps pipeline built from scratch with all industry-standard tools.
 
 ## Architecture
+
 - **Data Pipeline**: Apache Airflow DAGs for ingestion, validation, feature engineering
 - **Experiment Tracking**: MLflow with MinIO artifact storage
 - **Model Serving**: FastAPI with A/B testing and shadow mode
@@ -11,6 +12,7 @@ A production-grade MLOps pipeline built from scratch with all industry-standard 
 - **CI/CD**: Docker multi-stage builds
 
 ## Stack
+
 | Component | Tool |
 |---|---|
 | Workflow | Apache Airflow 2.9 |
@@ -22,6 +24,7 @@ A production-grade MLOps pipeline built from scratch with all industry-standard 
 | Drift | Scipy KS Test |
 
 ## Phases Built
+
 - Phase 1: Project structure, FastAPI, Docker, tests
 - Phase 2: Airflow data pipeline, feature engineering
 - Phase 3: MLflow training, 10-trial HP search, model registry
@@ -30,6 +33,7 @@ A production-grade MLOps pipeline built from scratch with all industry-standard 
 - Phase 6: A/B testing (90/10 split), shadow mode, champion-challenger
 
 ## Quick Start
+
 ```powershell
 docker compose up -d
 # API    → http://localhost:8000/docs
@@ -60,7 +64,7 @@ python -m pytest -q tests
 ```
 If `artifacts/model.pkl` is missing the tests train a small iris model on the fly.
 
-
 ## Dataset
+
 Iris classification (150 samples, 3 classes) used as a proxy.
 The pipeline architecture is dataset-agnostic.
